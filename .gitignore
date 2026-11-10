@@ -1,0 +1,11 @@
+node_modules/
+.env
+uploads/tmp/*
+!uploads/tmp/.gitkeep
+public/media/videos/*
+public/media/thumbnails/*
+public/media/hls/*
+!public/media/videos/.gitkeep
+!public/media/thumbnails/.gitkeep
+!public/media/hls/.gitkeep
+npm-debug.log

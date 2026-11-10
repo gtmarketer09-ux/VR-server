@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Video CMS</title></head>
+<body>
+<script>
+  fetch('/api/auth/me')
+    .then((r) => { window.location.href = r.ok ? '/upload.html' : '/login.html'; })
+    .catch(() => { window.location.href = '/login.html'; });
+</script>
+</body>
+</html>

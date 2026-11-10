@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bandwidth test — Video CMS</title>
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  .bt-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 20px; }
+  @media (max-width: 900px) { .bt-grid { grid-template-columns: 1fr; } }
+  .speed-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+  .speed-row .btn { padding: 8px 12px; font-size: 13px; }
+  .speed-row .btn.active { background: var(--amber); color: #1a1305; border-color: var(--amber); }
+  .stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .stat b { font-family: var(--font-mono); font-weight: 500; }
+  .big { font-size: 28px; font-family: var(--font-display); color: var(--teal); }
+  #log { font-family: var(--font-mono); font-size: 12px; max-height: 260px; overflow: auto; color: var(--text-muted); white-space: pre-wrap; margin: 0; }
+  #log .up { color: var(--teal); } #log .down { color: var(--amber); }
+  .bar { height: 8px; background: var(--panel-raised); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .bar > div { height: 100%; background: var(--teal); transition: width .3s; }
+</style>
+</head>
+<body data-page="bandwidth-test">
+  <div class="shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+    <main class="main">
+      <div class="page-header">
+        <h1>Bandwidth test</h1>
+        <p>Simulates a slower connection on your local server so you can watch the player switch quality.
+           Only works when <code>NODE_ENV</code> is not <code>production</code>.</p>
+      </div>
+
+      <div class="panel" style="margin-bottom:20px;">
+        <label for="video-pick">Video</label>
+        <select id="video-pick"><option>Loading…</option></select>
+
+        <div class="speed-row" id="speeds">
+          <button class="btn btn-ghost" data-kbps="0">Unlimited</button>
+          <button class="btn btn-ghost" data-kbps="10000">10 Mbps</button>
+          <button class="btn btn-ghost" data-kbps="5000">5 Mbps</button>
+          <button class="btn btn-ghost" data-kbps="3000">3 Mbps</button>
+          <button class="btn btn-ghost" data-kbps="1800">1.8 Mbps</button>
+          <button class="btn btn-ghost" data-kbps="1000">1 Mbps</button>
+          <button class="btn btn-ghost" data-kbps="500">0.5 Mbps</button>
+        </div>
+        <div class="hint-text">Expected: ≥7 Mbps → 1080p · ~4–6 → 720p · ~2–3.5 → 480p · below 2 → 360p.
+          Changes show within 1–3 video pieces (6–20 s).</div>
+      </div>
+
+      <div class="bt-grid">
+        <div>
+          <div class="player-stage">
+            <video id="video" controls playsinline muted style="width:100%; border-radius:10px; background:#000; display:block;"></video>
+            <select id="quality" class="quality-select" title="Quality"><option value="-1">Auto</option></select>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="hint-text" style="margin:0;">Now playing</div>
+          <div class="big" id="s-level">–</div>
+          <div class="stat"><span>Mode</span><b id="s-mode">–</b></div>
+          <div class="stat"><span>Simulated network</span><b id="s-sim">–</b></div>
+          <div class="stat"><span>Measured bandwidth</span><b id="s-bw">–</b></div>
+          <div class="stat"><span>Last piece</span><b id="s-frag">–</b></div>
+          <div style="padding-top:8px; font-size:14px;">
+            <div style="display:flex; justify-content:space-between;"><span>Buffered ahead</span><b id="s-buf" style="font-family:var(--font-mono);font-weight:500;">–</b></div>
+            <div class="bar"><div id="s-bufbar" style="width:0"></div></div>
+          </div>
+          <div class="stat"><span>Stalls (buffering)</span><b id="s-stalls">0</b></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:20px;">
+        <div class="hint-text" style="margin:0 0 8px;">Event log</div>
+        <pre id="log"></pre>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+  (function () {
+    const $ = (id) => document.getElementById(id);
+    const video = $('video'), pick = $('video-pick'), qsel = $('quality'), logEl = $('log');
+    let hls = null, stalls = 0, lastLevel = -1;
+    const shortSide = (l) => Math.min(l.width || Infinity, l.height || Infinity) || l.height;
+    const t0 = performance.now();
+
+    function log(msg, cls) {
+      const t = ((performance.now() - t0) / 1000).toFixed(1).padStart(6);
+      const line = document.createElement('span');
+      if (cls) line.className = cls;
+      line.textContent = `${t}s  ${msg}\n`;
+      logEl.prepend(line);
+    }
+
+    // ---- simulated speed (cookie read by utils/devThrottle.js on the server) ----
+    function getSim() { const m = /(?:^|;\s*)sim_kbps=(\d+)/.exec(document.cookie); return m ? Number(m[1]) : 0; }
+    function setSim(kbps) {
+      document.cookie = kbps
+        ? `sim_kbps=${kbps}; path=/; SameSite=Lax`
+        : 'sim_kbps=; path=/; max-age=0';
+      document.querySelectorAll('#speeds .btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.kbps) === kbps));
+      $('s-sim').textContent = kbps ? `${(kbps / 1000).toFixed(1)} Mbps` : 'unlimited';
+      log(`network set to ${kbps ? (kbps / 1000).toFixed(1) + ' Mbps' : 'unlimited'}`);
+    }
+    $('speeds').addEventListener('click', (e) => { const b = e.target.closest('[data-kbps]'); if (b) setSim(Number(b.dataset.kbps)); });
+    setSim(getSim());
+
+    // ---- player ----
+    function load(url) {
+      if (hls) hls.destroy();
+      stalls = 0; lastLevel = -1; $('s-stalls').textContent = '0';
+      qsel.innerHTML = '<option value="-1">Auto</option>';
+      if (!window.Hls || !Hls.isSupported()) { log('hls.js not supported in this browser'); return; }
+
+      hls = new Hls({
+        maxBufferLength: 12,          // keep less buffered so speed changes show up quickly
+        capLevelToPlayerSize: false,  // allow 1080p even in this small player, for testing
+        // Start from a modest estimate. Real viewers start the same way, then adapt.
+        abrEwmaDefaultEstimate: 2000000,
+      });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, d) => {
+        d.levels.map((l, i) => ({ p: shortSide(l), i })).sort((a, b) => b.p - a.p)
+          .forEach(({ p, i }) => qsel.add(new Option(`${p}p`, String(i))));
+        log(`loaded: ${d.levels.map((l) => shortSide(l) + 'p').join(', ')}`);
+        video.play().catch(() => {});
+      });
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_, d) => {
+        const p = shortSide(hls.levels[d.level]);
+        const prev = lastLevel >= 0 ? shortSide(hls.levels[lastLevel]) : null;
+        log(`quality → ${p}p${prev ? ` (was ${prev}p)` : ''}`, prev && p > prev ? 'up' : prev && p < prev ? 'down' : '');
+        lastLevel = d.level;
+      });
+      hls.on(Hls.Events.FRAG_LOADED, (_, d) => {
+        const f = d.frag, s = f.stats || d.stats || {};
+        const ms = s.loading ? s.loading.end - s.loading.start : 0;
+        const kb = (s.total || s.loaded || 0) / 1024;
+        $('s-frag').textContent = `${shortSide(hls.levels[f.level])}p #${f.sn} · ${kb.toFixed(0)} KB in ${(ms / 1000).toFixed(1)}s`;
+      });
+      hls.on(Hls.Events.ERROR, (_, d) => {
+        if (d.details === 'bufferStalledError') { stalls++; $('s-stalls').textContent = stalls; log('stalled (buffering)', 'down'); }
+        if (d.fatal) { log(`fatal error: ${d.details}`); if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad(); else hls.recoverMediaError(); }
+      });
+      qsel.onchange = () => {
+        hls.nextLevel = Number(qsel.value);
+        log(qsel.value === '-1' ? 'mode → Auto' : `mode → manual ${qsel.selectedOptions[0].text}`);
+      };
+    }
+
+    setInterval(() => {
+      if (!hls) return;
+      const lvl = hls.levels[hls.currentLevel];
+      $('s-level').textContent = lvl ? `${shortSide(lvl)}p` : '–';
+      $('s-mode').textContent = hls.autoLevelEnabled ? 'Auto (by bandwidth)' : 'Manual';
+      qsel.options[0].text = hls.autoLevelEnabled && lvl ? `Auto (${shortSide(lvl)}p)` : 'Auto';
+      $('s-bw').textContent = `${(hls.bandwidthEstimate / 1e6).toFixed(2)} Mbps`;
+      let ahead = 0;
+      for (let i = 0; i < video.buffered.length; i++) {
+        if (video.buffered.start(i) <= video.currentTime && video.currentTime <= video.buffered.end(i)) {
+          ahead = video.buffered.end(i) - video.currentTime;
+        }
+      }
+      $('s-buf').textContent = `${ahead.toFixed(1)} s`;
+      $('s-bufbar').style.width = `${Math.min(100, (ahead / 12) * 100)}%`;
+    }, 500);
+
+    // ---- video list ----
+    fetch('/api/videos?page=1&limit=100').then((r) => r.json()).then(({ data }) => {
+      const list = (data || []).filter((v) => v.hls_url);
+      if (!list.length) { pick.innerHTML = '<option>No converted videos yet - upload one first</option>'; return; }
+      pick.innerHTML = list.map((v) => `<option value="${v.hls_url}">${v.title.replace(/</g, '&lt;')} (${v.renditions.join(', ')})</option>`).join('');
+      pick.onchange = () => { log(`video: ${pick.selectedOptions[0].text}`); load(pick.value); };
+      load(pick.value);
+    });
+  })();
+  </script>
+</body>
+</html>

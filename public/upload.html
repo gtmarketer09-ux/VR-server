@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Upload — Video CMS</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body data-page="upload">
+  <div class="shell">
+    <aside class="sidebar" id="sidebar-mount"></aside>
+
+    <main class="main">
+      <div class="page-header">
+        <h1>Upload a video</h1>
+        <p>Each upload is converted automatically into 1080p, 720p, 480p and 360p. Viewers get the quality that fits their connection, or can pick one.</p>
+      </div>
+
+      <div class="panel">
+        <form id="upload-form">
+          <div class="field">
+            <label for="title">Title</label>
+            <input type="text" id="title" name="title" required maxlength="255" />
+          </div>
+
+          <div class="field">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" maxlength="2000"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="category">Category</label>
+            <select id="category" name="category_id">
+              <option value="">Uncategorized</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="video">Video file (.mp4, .webm or .mov — upload in 1080p for best results)</label>
+            <input type="file" id="video" name="video" accept="video/mp4,video/webm,video/quicktime" required />
+          </div>
+
+          <div class="field">
+            <label for="thumbnail">Thumbnail (optional — a frame is grabbed automatically if left blank)</label>
+            <input type="file" id="thumbnail" name="thumbnail" accept="image/jpeg,image/png,image/webp" />
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="submit-btn">Upload video</button>
+          <span class="hint-text" id="progress-text"></span>
+          <div class="error-text" id="form-error"></div>
+        </form>
+      </div>
+
+      <div class="page-header" style="margin-top: 40px;">
+        <h1 style="font-size: 20px;">Recent uploads</h1>
+        <p>Converting takes roughly as long as the video itself (one video at a time; others wait in the queue).</p>
+      </div>
+      <div id="recent-list" class="video-grid"></div>
+    </main>
+  </div>
+
+  <script src="/js/nav.js"></script>
+  <script src="/js/upload.js"></script>
+</body>
+</html>
