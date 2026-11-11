@@ -15,12 +15,20 @@ const { spawn } = require('child_process');
 const fs = require('fs/promises');
 const path = require('path');
 
+const fsSync = require('fs');
+function ensureExecutable(binPath) {
+  if (!binPath || !fsSync.existsSync(binPath)) return;
+  try { fsSync.chmodSync(binPath, 0o755); } catch (_) {}
+}
+
 function resolveBinary(envVar, staticModule, pick) {
   if (process.env[envVar]) return process.env[envVar];
   try { return pick(require(staticModule)); } catch (_) { return null; }
 }
 const FFMPEG = resolveBinary('FFMPEG_PATH', 'ffmpeg-static', (m) => m) || 'ffmpeg';
 const FFPROBE = resolveBinary('FFPROBE_PATH', 'ffprobe-static', (m) => m.path) || 'ffprobe';
+ensureExecutable(FFMPEG);
+ensureExecutable(FFPROBE);
 
 // Quality ladder. Only rungs at or below the source size are produced (never upscales).
 const LADDER = [
