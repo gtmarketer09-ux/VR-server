@@ -5,6 +5,70 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Categories — Video CMS</title>
 <link rel="stylesheet" href="/css/style.css" />
+<style>
+  .category-group-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .category-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .category-group-title {
+    font-weight: 600;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .subcat-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-left: 4px;
+  }
+  .subcat-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel-raised);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 5px 8px 5px 12px;
+    font-size: 12.5px;
+  }
+  .subcat-chip .count {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .subcat-chip button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1;
+  }
+  .subcat-chip button:hover {
+    background: rgba(227, 87, 63, 0.15);
+    color: var(--danger);
+  }
+</style>
 </head>
 <body data-page="categories">
   <div class="shell">
@@ -12,23 +76,47 @@
 
     <main class="main">
       <div class="page-header">
-        <h1>Categories</h1>
-        <p>Videos are organized under these when you upload them.</p>
+        <h1>Categories & Subcategories</h1>
+        <p>Organize your videos into high-level categories and specific subcategories.</p>
       </div>
 
-      <div class="panel" style="margin-bottom: 24px;">
-        <form id="category-form" style="display:flex; gap:10px; align-items:flex-end;">
-          <div class="field" style="flex:1; margin-bottom:0;">
-            <label for="category-name">New category</label>
-            <input type="text" id="category-name" placeholder="e.g. Skating, Travel, VR/360" required />
-          </div>
-          <button type="submit" class="btn btn-primary">Add category</button>
-        </form>
-        <div class="error-text" id="form-error"></div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <!-- Add Category Form -->
+        <div class="panel">
+          <h2 style="font-size: 15px; margin: 0 0 12px 0; font-family: var(--font-display);">Add Category</h2>
+          <form id="category-form" style="display:flex; flex-direction:column; gap:12px;">
+            <div class="field" style="margin-bottom:0;">
+              <label for="category-name">Category name</label>
+              <input type="text" id="category-name" placeholder="e.g. Skating, VR 360, Travel" required />
+            </div>
+            <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Add category</button>
+          </form>
+          <div class="error-text" id="form-error"></div>
+        </div>
+
+        <!-- Add Subcategory Form -->
+        <div class="panel">
+          <h2 style="font-size: 15px; margin: 0 0 12px 0; font-family: var(--font-display);">Add Subcategory</h2>
+          <form id="subcategory-form" style="display:flex; flex-direction:column; gap:12px;">
+            <div class="field" style="margin-bottom:0;">
+              <label for="subcat-parent">Parent Category</label>
+              <select id="subcat-parent" required>
+                <option value="">Select a category first…</option>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label for="subcategory-name">Subcategory name</label>
+              <input type="text" id="subcategory-name" placeholder="e.g. Rollercoasters, Nature, Downtown" required />
+            </div>
+            <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Add subcategory</button>
+          </form>
+          <div class="error-text" id="subcat-form-error"></div>
+        </div>
       </div>
 
       <div class="panel">
-        <div id="category-list" class="chip-row">
+        <h2 style="font-size: 15px; margin: 0 0 16px 0; font-family: var(--font-display);">Categories & Structure</h2>
+        <div id="category-list">
           <span style="color: var(--text-muted); font-size: 13px;">Loading…</span>
         </div>
       </div>
@@ -38,43 +126,81 @@
   <script src="/js/nav.js"></script>
   <script>
     const listEl = document.getElementById('category-list');
-    const form = document.getElementById('category-form');
-    const nameInput = document.getElementById('category-name');
-    const formError = document.getElementById('form-error');
+    const catForm = document.getElementById('category-form');
+    const catNameInput = document.getElementById('category-name');
+    const catFormError = document.getElementById('form-error');
+
+    const subForm = document.getElementById('subcategory-form');
+    const subcatParent = document.getElementById('subcat-parent');
+    const subcatNameInput = document.getElementById('subcategory-name');
+    const subcatFormError = document.getElementById('subcat-form-error');
+
+    let allCategories = [];
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
 
     async function loadCategories() {
       const res = await fetch('/api/categories');
       if (!res.ok) return;
-      const categories = await res.json();
+      allCategories = await res.json();
 
-      if (categories.length === 0) {
-        listEl.innerHTML = `<span style="color: var(--text-muted); font-size: 13px;">No categories yet — add your first one above.</span>`;
+      // Populate parent category dropdown
+      const prevSelected = subcatParent.value;
+      subcatParent.innerHTML =
+        `<option value="">Select a category…</option>` +
+        allCategories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+      if (prevSelected && allCategories.some((c) => String(c.id) === String(prevSelected))) {
+        subcatParent.value = prevSelected;
+      }
+
+      // Render cards
+      if (allCategories.length === 0) {
+        listEl.innerHTML = `<span style="color: var(--text-muted); font-size: 13px;">No categories yet — add your first category above.</span>`;
         return;
       }
 
-      listEl.innerHTML = categories
-        .map(
-          (c) => `
-        <div class="chip" data-id="${c.id}">
-          <span>${escapeHtml(c.name)}</span>
-          <span class="count">${c.video_count}</span>
-          <button type="button" class="delete-btn" title="Delete category" data-id="${c.id}" data-name="${escapeHtml(c.name)}">×</button>
-        </div>
-      `
-        )
+      listEl.innerHTML = allCategories
+        .map((cat) => {
+          const subcats = cat.subcategories || [];
+          const subcatsHtml = subcats.length > 0
+            ? subcats.map((sc) => `
+                <div class="subcat-chip" data-id="${sc.id}">
+                  <span>${escapeHtml(sc.name)}</span>
+                  <span class="count">${sc.video_count || 0}</span>
+                  <button type="button" class="delete-subcat-btn" title="Delete subcategory" data-id="${sc.id}" data-name="${escapeHtml(sc.name)}">×</button>
+                </div>
+              `).join('')
+            : `<span style="color: var(--text-muted); font-size: 12px; font-style: italic;">No subcategories yet</span>`;
+
+          return `
+            <div class="category-group-card" data-cat-id="${cat.id}">
+              <div class="category-group-header">
+                <div class="category-group-title">
+                  <span>${escapeHtml(cat.name)}</span>
+                  <span class="pill pill-processing" style="padding: 2px 7px; font-size: 10px;">${cat.video_count || 0} videos</span>
+                </div>
+                <button type="button" class="btn btn-danger-ghost delete-cat-btn" style="padding: 4px 10px; font-size: 12px;" data-id="${cat.id}" data-name="${escapeHtml(cat.name)}">
+                  Delete Category
+                </button>
+              </div>
+              <div class="subcat-chips">
+                ${subcatsHtml}
+              </div>
+            </div>
+          `;
+        })
         .join('');
     }
 
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
-
-    form.addEventListener('submit', async (e) => {
+    // Add Category
+    catForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      formError.textContent = '';
-      const name = nameInput.value.trim();
+      catFormError.textContent = '';
+      const name = catNameInput.value.trim();
       if (!name) return;
 
       try {
@@ -85,21 +211,60 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not add category');
-        nameInput.value = '';
-        loadCategories();
+        catNameInput.value = '';
+        await loadCategories();
+        subcatParent.value = data.id;
       } catch (err) {
-        formError.textContent = err.message;
+        catFormError.textContent = err.message;
       }
     });
 
-    listEl.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.delete-btn');
-      if (!btn) return;
-      const ok = confirm(`Delete "${btn.dataset.name}"? Videos in it will become uncategorized, not deleted.`);
-      if (!ok) return;
+    // Add Subcategory
+    subForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      subcatFormError.textContent = '';
+      const category_id = subcatParent.value;
+      const name = subcatNameInput.value.trim();
+      if (!category_id) {
+        subcatFormError.textContent = 'Please select a parent category.';
+        return;
+      }
+      if (!name) return;
 
-      await fetch(`/api/categories/${btn.dataset.id}`, { method: 'DELETE' });
-      loadCategories();
+      try {
+        const res = await fetch('/api/categories/subcategories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category_id, name }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not add subcategory');
+        subcatNameInput.value = '';
+        await loadCategories();
+      } catch (err) {
+        subcatFormError.textContent = err.message;
+      }
+    });
+
+    // Delete actions
+    listEl.addEventListener('click', async (e) => {
+      const catBtn = e.target.closest('.delete-cat-btn');
+      if (catBtn) {
+        const ok = confirm(`Delete category "${catBtn.dataset.name}" and its subcategories?\nVideos in it will become uncategorized.`);
+        if (!ok) return;
+        await fetch(`/api/categories/${catBtn.dataset.id}`, { method: 'DELETE' });
+        loadCategories();
+        return;
+      }
+
+      const subBtn = e.target.closest('.delete-subcat-btn');
+      if (subBtn) {
+        const ok = confirm(`Delete subcategory "${subBtn.dataset.name}"?\nVideos will remain in the parent category.`);
+        if (!ok) return;
+        await fetch(`/api/categories/subcategories/${subBtn.dataset.id}`, { method: 'DELETE' });
+        loadCategories();
+        return;
+      }
     });
 
     loadCategories();

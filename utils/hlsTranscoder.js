@@ -125,6 +125,16 @@ async function transcodeToHls(input, outDir, onProgress = () => {}) {
     if (pct !== last) { last = pct; onProgress(pct); }
   });
 
+  // Ensure forward slashes in master.m3u8 (ffmpeg on Windows outputs backslashes)
+  const masterPath = path.join(outDir, 'master.m3u8');
+  try {
+    let masterContent = await fs.readFile(masterPath, 'utf8');
+    if (masterContent.includes('\\')) {
+      masterContent = masterContent.replace(/\\/g, '/');
+      await fs.writeFile(masterPath, masterContent, 'utf8');
+    }
+  } catch (_) {}
+
   return { renditions: rungs.map((r) => r.name), width: src.width, height: src.height, duration: src.duration };
 }
 

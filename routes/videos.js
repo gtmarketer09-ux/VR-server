@@ -30,6 +30,9 @@ function toPublicShape(row) {
     category: row.category_name
       ? { id: row.category_id, name: row.category_name, slug: row.category_slug }
       : null,
+    subcategory: row.subcategory_name
+      ? { id: row.subcategory_id, name: row.subcategory_name, slug: row.subcategory_slug }
+      : null,
     thumbnail_url: row.thumbnail_filename
       ? mediaUrl(`/media/thumbnails/${row.thumbnail_filename}`)
       : null,
@@ -63,15 +66,28 @@ router.get('/', requireAuth, async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 24, 1), 100);
   const offset = (page - 1) * limit;
   const categoryId = req.query.category_id ? parseInt(req.query.category_id) : null;
+  const subcategoryId = req.query.subcategory_id ? parseInt(req.query.subcategory_id) : null;
 
   try {
-    const where = categoryId ? 'WHERE v.category_id = ?' : '';
-    const params = categoryId ? [categoryId] : [];
+    const whereClauses = [];
+    const params = [];
+    if (categoryId) {
+      whereClauses.push('v.category_id = ?');
+      params.push(categoryId);
+    }
+    if (subcategoryId) {
+      whereClauses.push('v.subcategory_id = ?');
+      params.push(subcategoryId);
+    }
+    const where = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     const [rows] = await db.query(
-      `SELECT v.*, c.name AS category_name, c.slug AS category_slug
+      `SELECT v.*,
+              c.name AS category_name, c.slug AS category_slug,
+              sc.name AS subcategory_name, sc.slug AS subcategory_slug
        FROM videos v
        LEFT JOIN categories c ON c.id = v.category_id
+       LEFT JOIN subcategories sc ON sc.id = v.subcategory_id
        ${where}
        ORDER BY v.created_at DESC
        LIMIT ? OFFSET ?`,
@@ -106,7 +122,7 @@ router.post(
     });
   },
   async (req, res) => {
-    const { title, description, category_id } = req.body;
+    const { title, description, category_id, subcategory_id } = req.body;
     const videoFile = req.files?.video?.[0];
     const thumbnailFile = req.files?.thumbnail?.[0];
 
@@ -122,13 +138,14 @@ router.post(
     try {
       const [result] = await db.query(
         `INSERT INTO videos
-           (title, description, category_id, video_filename, original_filename,
+           (title, description, category_id, subcategory_id, video_filename, original_filename,
             source_tmp, thumbnail_tmp, status, progress)
-         VALUES (?, ?, ?, '', ?, ?, ?, 'processing', 0)`,
+         VALUES (?, ?, ?, ?, '', ?, ?, ?, 'processing', 0)`,
         [
           title.trim(),
           description || null,
           category_id || null,
+          subcategory_id || null,
           videoFile.originalname,
           path.basename(videoFile.path),
           thumbnailFile ? path.basename(thumbnailFile.path) : null,

@@ -1,11 +1,13 @@
 (function () {
   const form = document.getElementById('upload-form');
   const categorySelect = document.getElementById('category');
+  const subcategorySelect = document.getElementById('subcategory');
   const submitBtn = document.getElementById('submit-btn');
   const progressText = document.getElementById('progress-text');
   const formError = document.getElementById('form-error');
   const recentList = document.getElementById('recent-list');
 
+  let categoriesData = [];
   let pollTimer = null;
 
   function escapeHtml(str) {
@@ -31,11 +33,37 @@
   async function loadCategories() {
     const res = await fetch('/api/categories');
     if (!res.ok) return;
-    const categories = await res.json();
+    categoriesData = await res.json();
     categorySelect.innerHTML =
       `<option value="">Uncategorized</option>` +
-      categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+      categoriesData.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    updateSubcategories();
   }
+
+  function updateSubcategories() {
+    const selectedCatId = categorySelect.value;
+    if (!selectedCatId) {
+      subcategorySelect.innerHTML = `<option value="">Select a category first</option>`;
+      subcategorySelect.disabled = true;
+      return;
+    }
+
+    const cat = categoriesData.find((c) => String(c.id) === String(selectedCatId));
+    const subcats = cat ? cat.subcategories || [] : [];
+
+    if (subcats.length === 0) {
+      subcategorySelect.innerHTML = `<option value="">No subcategories (general)</option>`;
+      subcategorySelect.disabled = true;
+      return;
+    }
+
+    subcategorySelect.disabled = false;
+    subcategorySelect.innerHTML =
+      `<option value="">No subcategory (optional)</option>` +
+      subcats.map((sc) => `<option value="${sc.id}">${escapeHtml(sc.name)}</option>`).join('');
+  }
+
+  categorySelect.addEventListener('change', updateSubcategories);
 
   // Recently-uploaded videos, newest first. Polls while anything is still
   // 'processing' so status pills update without a manual refresh, then stops.
@@ -76,7 +104,7 @@
         <div class="video-body">
           <div class="video-title">${escapeHtml(v.title)}</div>
           <div class="video-meta">
-            <span class="video-cat">${v.category ? escapeHtml(v.category.name) : 'Uncategorized'}</span>
+            <span class="video-cat">${v.category ? escapeHtml(v.category.name) + (v.subcategory ? ` › ${escapeHtml(v.subcategory.name)}` : '') : 'Uncategorized'}</span>
             ${statusPill(v.status, v.progress)}
           </div>
           ${v.renditions && v.renditions.length ? `<div class="renditions">${v.renditions.map(escapeHtml).join(' · ')}</div>` : ''}
@@ -128,6 +156,7 @@
       if (xhr.status === 202) {
         progressText.textContent = 'Uploaded — converting to 1080p / 720p / 480p / 360p in the background.';
         form.reset();
+        updateSubcategories();
         loadRecent();
         setTimeout(() => (progressText.textContent = ''), 4000);
       } else {

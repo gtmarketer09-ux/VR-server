@@ -4,6 +4,7 @@
  * (Fresh installs already get them from sql/schema.sql.)
  */
 const HLS_COLUMNS = [
+  ['subcategory_id', 'INT NULL AFTER category_id'],
   // folder name under public/media/hls/ (NULL = no HLS, e.g. older MP4-only videos)
   ['hls_path', 'VARCHAR(64) NULL AFTER video_filename'],
   // e.g. "1080p,720p,480p,360p"
@@ -16,6 +17,19 @@ const HLS_COLUMNS = [
 ];
 
 async function ensureVideoColumns(db) {
+  // Ensure subcategories table exists
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS subcategories (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      category_id INT NOT NULL,
+      name VARCHAR(150) NOT NULL,
+      slug VARCHAR(150) NOT NULL UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+      INDEX idx_subcategory_category (category_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+
   const [rows] = await db.query(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'videos'`

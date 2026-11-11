@@ -46,9 +46,16 @@
     const res = await fetch('/api/categories');
     if (!res.ok) return;
     const categories = await res.json();
-    categoryFilter.innerHTML =
-      `<option value="">All categories</option>` +
-      categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)} (${c.video_count})</option>`).join('');
+    let optionsHtml = `<option value="">All categories</option>`;
+    for (const c of categories) {
+      optionsHtml += `<option value="cat-${c.id}">${escapeHtml(c.name)} (${c.video_count})</option>`;
+      if (c.subcategories && c.subcategories.length > 0) {
+        for (const sc of c.subcategories) {
+          optionsHtml += `<option value="sub-${sc.id}">&nbsp;&nbsp;↳ ${escapeHtml(sc.name)} (${sc.video_count || 0})</option>`;
+        }
+      }
+    }
+    categoryFilter.innerHTML = optionsHtml;
   }
 
   function renderCard(v) {
@@ -72,7 +79,7 @@
           <div class="video-title">${escapeHtml(v.title)}</div>
           ${v.description ? `<div class="video-desc">${escapeHtml(v.description)}</div>` : ''}
           <div class="video-meta">
-            <span class="video-cat">${v.category ? escapeHtml(v.category.name) : 'Uncategorized'}</span>
+            <span class="video-cat">${v.category ? escapeHtml(v.category.name) + (v.subcategory ? ` › ${escapeHtml(v.subcategory.name)}` : '') : 'Uncategorized'}</span>
             ${statusPill(v.status, v.progress)}
           </div>
           ${renditionsLine(v.renditions)}
@@ -85,7 +92,15 @@
   async function loadGallery() {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Loading…</div>`;
     const params = new URLSearchParams({ page: currentPage, limit: PAGE_SIZE });
-    if (currentCategory) params.set('category_id', currentCategory);
+    if (currentCategory) {
+      if (currentCategory.startsWith('sub-')) {
+        params.set('subcategory_id', currentCategory.slice(4));
+      } else if (currentCategory.startsWith('cat-')) {
+        params.set('category_id', currentCategory.slice(4));
+      } else {
+        params.set('category_id', currentCategory);
+      }
+    }
 
     const res = await fetch(`/api/videos?${params}`);
     if (!res.ok) {
@@ -173,7 +188,15 @@
   async function loadJson() {
     jsonOutput.textContent = 'Loading…';
     const params = new URLSearchParams({ page: 1, limit: 100 });
-    if (currentCategory) params.set('category_id', currentCategory);
+    if (currentCategory) {
+      if (currentCategory.startsWith('sub-')) {
+        params.set('subcategory_id', currentCategory.slice(4));
+      } else if (currentCategory.startsWith('cat-')) {
+        params.set('category_id', currentCategory.slice(4));
+      } else {
+        params.set('category_id', currentCategory);
+      }
+    }
     const res = await fetch(`/api/videos?${params}`);
     const data = await res.json();
     jsonOutput.textContent = JSON.stringify(data, null, 2);
