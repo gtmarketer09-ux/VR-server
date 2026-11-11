@@ -4,7 +4,7 @@ const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
 
-// Creates public/media/{videos,thumbnails} + uploads/tmp before routes load.
+// Creates the media folders (public/media or MEDIA_ROOT) + temp folder before routes load.
 const { VIDEOS_DIR, THUMBS_DIR, HLS_DIR } = require('./utils/paths');
 const db = require('./config/db');
 const { ensureVideoColumns } = require('./utils/schema');
@@ -62,6 +62,11 @@ app.use(
 // simulate a bad connection. Never active in production.
 if (process.env.NODE_ENV !== 'production') {
   app.use('/media/hls', require('./utils/devThrottle')(HLS_DIR));
+  // lets the test page confirm the slowdown is actually active
+  app.get('/api/dev/throttle-status', (req, res) => {
+    const m = /(?:^|;\s*)sim_kbps=(\d+)/.exec(req.headers.cookie || '');
+    res.json({ active: true, simKbps: m ? Number(m[1]) : 0 });
+  });
 }
 
 // Adaptive streams: /media/hls/<name>/master.m3u8, /<name>/720p/index.m3u8, /<name>/720p/seg_0001.ts
@@ -109,10 +114,16 @@ const server = app.listen(PORT, () => {
     .catch((err) => console.error('[startup] video schema/queue init failed:', err.message));
 
   console.log(`Video CMS running on port ${PORT}`);
-  console.log(`Media dirs: videos=${VIDEOS_DIR} thumbs=${THUMBS_DIR}`);
+  console.log(`Media dirs: videos=${VIDEOS_DIR} thumbs=${THUMBS_DIR} hls=${HLS_DIR}`);
+  if (!process.env.MEDIA_ROOT && /[\\/]hbuilds[\\/]/.test(__dirname)) {
+    console.warn(
+      'WARNING: media is stored inside this deploy folder and will be lost on the next deploy. ' +
+      'Set MEDIA_ROOT in .env to a folder outside it (see utils/paths.js).'
+    );
+  }
   console.log(
     `Videos on disk: ${fs.existsSync(VIDEOS_DIR) ? fs.readdirSync(VIDEOS_DIR).length : 0}, ` +
-      `thumbnails: ${fs.existsSync(THUMBS_DIR) ? fs.readdirSync(THUMBS_DIR).length : 0}`
+    `thumbnails: ${fs.existsSync(THUMBS_DIR) ? fs.readdirSync(THUMBS_DIR).length : 0}`
   );
 });
 
