@@ -44,11 +44,16 @@ function run(cmd, args, onStdout) {
     let out = '';
     let err = '';
     p.stdout.on('data', (d) => { out += d; if (onStdout) onStdout(d.toString()); });
-    p.stderr.on('data', (d) => { err += d; if (err.length > 20000) err = err.slice(-20000); });
+    p.stderr.on('data', (d) => { err += d; if (err.length > 25000) err = err.slice(-25000); });
     p.on('error', reject);
-    p.on('close', (code) => (code === 0
-      ? resolve(out)
-      : reject(new Error(`${path.basename(cmd)} exited with code ${code}: ${err.trim().split('\n').slice(-3).join(' ')}`))));
+    p.on('close', (code) => {
+      if (code === 0) return resolve(out);
+      const lines = err.split('\n').map((l) => l.trim()).filter(Boolean);
+      const errorLines = lines
+        .filter((l) => !l.startsWith('frame=') && !l.startsWith('size=') && !l.startsWith('video:') && !l.startsWith('[aac @'))
+        .slice(-8);
+      reject(new Error(`${path.basename(cmd)} exited with code ${code}: ${errorLines.join(' | ') || lines.slice(-3).join(' ')}`));
+    });
   });
 }
 
@@ -88,6 +93,9 @@ async function transcodeToHls(input, outDir, onProgress = () => { }) {
 
   await fs.rm(outDir, { recursive: true, force: true });
   await fs.mkdir(outDir, { recursive: true });
+  for (const r of rungs) {
+    await fs.mkdir(path.join(outDir, r.name), { recursive: true });
+  }
 
   const n = rungs.length;
   const scale = (h) => (portrait ? `scale=${h}:-2` : `scale=-2:${h}`);
@@ -109,6 +117,7 @@ async function transcodeToHls(input, outDir, onProgress = () => { }) {
     args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
   }
   args.push(
+    '-threads', process.env.FFMPEG_THREADS || '2',
     '-preset', process.env.X264_PRESET || 'veryfast',
     '-profile:v', 'main', '-pix_fmt', 'yuv420p', '-sc_threshold', '0',
     // keyframe every 2s so every quality can switch at the same points
@@ -157,4 +166,4 @@ async function remuxToMp4(playlistPath, outputPath) {
   ]);
 }
 
-module.exports = { transcodeToHls, remuxToMp4, probe, LADDER };
+module.exports = { transcodeToHls, remuxToMp4, probe, run, FFMPEG, FFPROBE, LADDER };

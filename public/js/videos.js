@@ -37,9 +37,12 @@
     return `<span class="pill pill-processing">Processing${progress ? ` ${progress}%` : ''}</span>`;
   }
 
-  function renditionsLine(renditions) {
-    if (!renditions || !renditions.length) return '';
-    return `<div class="renditions">${renditions.map(escapeHtml).join(' · ')}</div>`;
+  function renditionsLine(renditions, errorMessage) {
+    if (renditions && renditions.length) {
+      return `<div class="renditions">${renditions.map(escapeHtml).join(' · ')}</div>`;
+    }
+    const note = errorMessage ? ` title="${escapeHtml(errorMessage)}"` : '';
+    return `<div class="renditions" style="color:var(--text-muted);font-style:italic;"${note}>Single MP4${errorMessage ? ' (conversion fallback)' : ''}</div>`;
   }
 
   async function loadCategories() {
@@ -82,7 +85,7 @@
             <span class="video-cat">${v.category ? escapeHtml(v.category.name) + (v.subcategory ? ` › ${escapeHtml(v.subcategory.name)}` : '') : 'Uncategorized'}</span>
             ${statusPill(v.status, v.progress)}
           </div>
-          ${renditionsLine(v.renditions)}
+          ${renditionsLine(v.renditions, v.error_message)}
           <button type="button" class="btn btn-danger-ghost delete-video-btn" data-id="${v.id}" data-title="${escapeHtml(v.title)}" style="margin-top:10px;width:100%;">Delete</button>
         </div>
       </div>

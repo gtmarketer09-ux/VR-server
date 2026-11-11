@@ -5,7 +5,7 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 const { VIDEOS_DIR, THUMBS_DIR, HLS_DIR } = require('./paths');
-const { transcodeToHls, remuxToMp4 } = require('./hlsTranscoder');
+const { transcodeToHls, remuxToMp4, run, FFMPEG } = require('./hlsTranscoder');
 
 // Hostinger (and some Linux hosts) ship npm binaries without +x — ffmpeg then
 // fails immediately and every upload lands as status=failed.
@@ -58,28 +58,25 @@ function probe(filePath) {
  * Transcodes an uploaded source video into a web-optimized MP4.
  * Returns the output filename (not full path).
  */
-function transcodeToMp4(sourcePath, outputBasename) {
+async function transcodeToMp4(sourcePath, outputBasename) {
   const outputFilename = `${outputBasename}.mp4`;
   const outputPath = path.join(VIDEOS_DIR, outputFilename);
 
-  return new Promise((resolve, reject) => {
-    ffmpeg(sourcePath)
-      .videoCodec('libx264')
-      .audioCodec('aac')
-      .audioBitrate('128k')
-      .outputOptions([
-        '-preset veryfast',
-        '-crf 23',
-        '-profile:v high',
-        '-level 4.1',
-        '-movflags +faststart',
-        `-vf scale=-2:'min(${MAX_HEIGHT},ih)'`,
-        '-pix_fmt yuv420p',
-      ])
-      .on('error', (err) => reject(err))
-      .on('end', () => resolve(outputFilename))
-      .save(outputPath);
-  });
+  await run(FFMPEG, [
+    '-hide_banner', '-y', '-i', sourcePath,
+    '-threads', process.env.FFMPEG_THREADS || '2',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '23',
+    '-profile:v', 'main',
+    '-pix_fmt', 'yuv420p',
+    '-vf', `scale=-2:min(ih\\,${MAX_HEIGHT})`,
+    '-c:a', 'aac',
+    '-b:a', '128k',
+    '-movflags', '+faststart',
+    outputPath,
+  ]);
+  return outputFilename;
 }
 
 /**
