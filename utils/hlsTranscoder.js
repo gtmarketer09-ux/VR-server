@@ -18,7 +18,7 @@ const path = require('path');
 const fsSync = require('fs');
 function ensureExecutable(binPath) {
   if (!binPath || !fsSync.existsSync(binPath)) return;
-  try { fsSync.chmodSync(binPath, 0o755); } catch (_) {}
+  try { fsSync.chmodSync(binPath, 0o755); } catch (_) { }
 }
 
 function resolveBinary(envVar, staticModule, pick) {
@@ -33,9 +33,9 @@ ensureExecutable(FFPROBE);
 // Quality ladder. Only rungs at or below the source size are produced (never upscales).
 const LADDER = [
   { name: '1080p', height: 1080, vbr: 5000, maxrate: 5350, bufsize: 7500 },
-  { name: '720p',  height: 720,  vbr: 2800, maxrate: 3000, bufsize: 4200 },
-  { name: '480p',  height: 480,  vbr: 1400, maxrate: 1500, bufsize: 2100 },
-  { name: '360p',  height: 360,  vbr: 800,  maxrate: 856,  bufsize: 1200 },
+  { name: '720p', height: 720, vbr: 2800, maxrate: 3000, bufsize: 4200 },
+  { name: '480p', height: 480, vbr: 1400, maxrate: 1500, bufsize: 2100 },
+  { name: '360p', height: 360, vbr: 800, maxrate: 856, bufsize: 1200 },
 ];
 
 function run(cmd, args, onStdout) {
@@ -79,7 +79,7 @@ async function probe(file) {
  * @param {(percent:number)=>void} [onProgress]
  * @returns {Promise<{renditions:string[], width:number, height:number, duration:number|null}>}
  */
-async function transcodeToHls(input, outDir, onProgress = () => {}) {
+async function transcodeToHls(input, outDir, onProgress = () => { }) {
   const src = await probe(input);
   const portrait = src.height > src.width;
   const shortSide = Math.min(src.width, src.height);
@@ -141,7 +141,7 @@ async function transcodeToHls(input, outDir, onProgress = () => {}) {
       masterContent = masterContent.replace(/\\/g, '/');
       await fs.writeFile(masterPath, masterContent, 'utf8');
     }
-  } catch (_) {}
+  } catch (_) { }
 
   return { renditions: rungs.map((r) => r.name), width: src.width, height: src.height, duration: src.duration };
 }
