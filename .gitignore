@@ -9,3 +9,6 @@ public/media/hls/*
 !public/media/thumbnails/.gitkeep
 !public/media/hls/.gitkeep
 npm-debug.log
+
+test_hls/
+
